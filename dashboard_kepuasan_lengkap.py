@@ -6,108 +6,127 @@ import statsmodels.api as sm
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
-# =====================================================
+# ==========================================================
 # KONFIGURASI HALAMAN
-# =====================================================
-st.set_page_config(page_title="Dashboard Analisis Tes", layout="wide")
+# ==========================================================
+st.set_page_config(page_title="Dashboard Analisis Tes Siswa", layout="wide")
 
-st.title("📊 Dashboard Analisis Hasil Tes Siswa")
-st.markdown("Dashboard interaktif untuk membaca performa siswa dan analisis soal")
+st.title("📊 Dashboard Analisis Hasil Tes")
+st.write("Dashboard interaktif untuk analisis performa siswa dan kualitas soal")
 
-# =====================================================
+# ==========================================================
 # UPLOAD DATA
-# =====================================================
+# ==========================================================
 uploaded_file = st.file_uploader("Upload File Excel", type=["xlsx"])
 
 if uploaded_file:
 
-    df = pd.read_excel(uploaded_file)
+    try:
+        df = pd.read_excel(uploaded_file)
+    except:
+        st.error("File tidak bisa dibaca")
+        st.stop()
 
-    st.subheader("Preview Data")
-    st.dataframe(df)
+    st.subheader("Preview Dataset")
+    st.dataframe(df.head())
 
-    # =====================================================
-    # IDENTIFIKASI KOLOM SOAL
-    # =====================================================
+    # ==========================================================
+    # VALIDASI DATA
+    # ==========================================================
+    if "Total_Skor" not in df.columns:
+        st.error("Dataset harus memiliki kolom 'Total_Skor'")
+        st.stop()
+
+    # cari semua kolom soal otomatis
     soal_cols = [col for col in df.columns if "Soal_" in col]
 
-    indikator = df[soal_cols]
+    if len(soal_cols) == 0:
+        st.error("Kolom soal tidak ditemukan")
+        st.stop()
 
-    # =====================================================
+    indikator = df[soal_cols].apply(pd.to_numeric, errors="coerce")
+    indikator = indikator.fillna(0)
+
+    # ==========================================================
     # KPI UTAMA
-    # =====================================================
+    # ==========================================================
+    st.header("📌 Statistik Utama")
+
     rata_skor = df["Total_Skor"].mean()
-    skor_max = len(soal_cols)
-    skor_min = df["Total_Skor"].min()
+    max_skor = df["Total_Skor"].max()
+    min_skor = df["Total_Skor"].min()
 
     col1, col2, col3 = st.columns(3)
 
     col1.metric("Jumlah Siswa", len(df))
     col2.metric("Rata-rata Skor", f"{rata_skor:.2f}")
-    col3.metric("Skor Maksimum", skor_max)
+    col3.metric("Skor Maksimum", max_skor)
 
     st.divider()
 
-    # =====================================================
-    # DISTRIBUSI SKOR
-    # =====================================================
-    st.header("📈 Distribusi Nilai Siswa")
+    # ==========================================================
+    # DISTRIBUSI NILAI
+    # ==========================================================
+    st.header("📈 Distribusi Skor")
 
     fig_hist, ax_hist = plt.subplots()
 
     ax_hist.hist(df["Total_Skor"], bins=10)
     ax_hist.set_xlabel("Total Skor")
     ax_hist.set_ylabel("Jumlah Siswa")
-    ax_hist.set_title("Distribusi Skor Siswa")
+    ax_hist.set_title("Distribusi Skor")
 
     st.pyplot(fig_hist)
 
-    # =====================================================
-    # ANALISIS TINGKAT KESULITAN SOAL
-    # =====================================================
+    st.divider()
+
+    # ==========================================================
+    # ANALISIS KESULITAN SOAL
+    # ==========================================================
     st.header("📚 Analisis Tingkat Kesulitan Soal")
 
     tingkat_benar = indikator.mean()
 
-    fig_soal, ax_soal = plt.subplots(figsize=(10,4))
+    fig_bar, ax_bar = plt.subplots(figsize=(10,4))
 
-    ax_soal.bar(tingkat_benar.index, tingkat_benar.values)
-
-    ax_soal.set_ylabel("Proporsi Benar")
-    ax_soal.set_title("Persentase Jawaban Benar per Soal")
+    ax_bar.bar(tingkat_benar.index, tingkat_benar.values)
+    ax_bar.set_ylabel("Proporsi Benar")
+    ax_bar.set_title("Persentase Jawaban Benar per Soal")
 
     plt.xticks(rotation=90)
 
-    st.pyplot(fig_soal)
+    st.pyplot(fig_bar)
 
     soal_sulit = tingkat_benar.idxmin()
     soal_mudah = tingkat_benar.idxmax()
 
-    st.warning(f"Soal paling sulit: **{soal_sulit}**")
-    st.success(f"Soal paling mudah: **{soal_mudah}**")
+    st.warning(f"Soal paling sulit: {soal_sulit}")
+    st.success(f"Soal paling mudah: {soal_mudah}")
 
     st.divider()
 
-    # =====================================================
-    # FILTER INTERAKTIF SOAL
-    # =====================================================
-    st.header("🔍 Analisis Detail per Soal")
+    # ==========================================================
+    # ANALISIS DETAIL SOAL
+    # ==========================================================
+    st.header("🔍 Analisis Detail Soal")
 
     selected_soal = st.selectbox("Pilih Soal", soal_cols)
 
-    benar = df[selected_soal].sum()
-    salah = len(df) - benar
+    benar = indikator[selected_soal].sum()
+    salah = len(indikator) - benar
 
     fig_pie, ax_pie = plt.subplots()
 
-    ax_pie.pie([benar, salah], labels=["Benar", "Salah"], autopct="%1.1f%%")
+    ax_pie.pie([benar, salah], labels=["Benar","Salah"], autopct="%1.1f%%")
     ax_pie.set_title(f"Distribusi Jawaban {selected_soal}")
 
     st.pyplot(fig_pie)
 
-    # =====================================================
+    st.divider()
+
+    # ==========================================================
     # KORELASI ANTAR SOAL
-    # =====================================================
+    # ==========================================================
     st.header("🔗 Korelasi Antar Soal")
 
     corr = indikator.corr()
@@ -128,83 +147,97 @@ if uploaded_file:
 
     st.divider()
 
-    # =====================================================
+    # ==========================================================
     # REGRESI
-    # =====================================================
-    st.header("📊 Analisis Pengaruh Soal terhadap Skor")
+    # ==========================================================
+    st.header("📊 Analisis Regresi")
 
-    X = sm.add_constant(indikator)
-    y = df["Total_Skor"]
+    try:
+        X = sm.add_constant(indikator)
+        y = pd.to_numeric(df["Total_Skor"], errors="coerce")
 
-    model = sm.OLS(y, X).fit()
+        model = sm.OLS(y, X).fit()
 
-    coef = model.params[1:]
+        coef = model.params[1:]
 
-    fig_reg, ax_reg = plt.subplots(figsize=(10,4))
+        fig_reg, ax_reg = plt.subplots(figsize=(10,4))
 
-    ax_reg.bar(coef.index, coef.values)
+        ax_reg.bar(coef.index, coef.values)
 
-    ax_reg.set_title("Kontribusi Soal terhadap Total Skor")
+        ax_reg.set_title("Pengaruh Soal terhadap Total Skor")
 
-    plt.xticks(rotation=90)
+        plt.xticks(rotation=90)
 
-    st.pyplot(fig_reg)
+        st.pyplot(fig_reg)
 
-    st.info(f"Nilai R² Model: {model.rsquared:.3f}")
+        st.info(f"Nilai R² Model: {model.rsquared:.3f}")
+
+    except:
+        st.warning("Regresi tidak dapat dihitung")
 
     st.divider()
 
-    # =====================================================
+    # ==========================================================
     # CLUSTERING SISWA
-    # =====================================================
+    # ==========================================================
     st.header("🎯 Segmentasi Kemampuan Siswa")
 
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(indikator)
+    try:
 
-    kmeans = KMeans(n_clusters=3, random_state=42)
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(indikator)
 
-    df["Cluster"] = kmeans.fit_predict(X_scaled)
+        kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
 
-    cluster_mean = df.groupby("Cluster")["Total_Skor"].mean()
+        df["Cluster"] = kmeans.fit_predict(X_scaled)
 
-    fig_cluster, ax_cluster = plt.subplots()
+        cluster_mean = df.groupby("Cluster", as_index=True).mean(numeric_only=True)
 
-    cluster_mean.plot(kind="bar", ax=ax_cluster)
+        fig_cluster, ax_cluster = plt.subplots()
 
-    ax_cluster.set_ylabel("Rata-rata Skor")
-    ax_cluster.set_title("Segmentasi Kemampuan")
+        cluster_mean["Total_Skor"].plot(kind="bar", ax=ax_cluster)
 
-    st.pyplot(fig_cluster)
+        ax_cluster.set_ylabel("Rata-rata Skor")
+        ax_cluster.set_title("Segmentasi Kemampuan")
 
-    st.dataframe(df.groupby("Cluster").mean())
+        st.pyplot(fig_cluster)
+
+        st.subheader("Ringkasan Cluster")
+        st.dataframe(cluster_mean)
+
+    except:
+        st.warning("Clustering gagal dilakukan")
 
     st.divider()
 
-    # =====================================================
+    # ==========================================================
     # INSIGHT OTOMATIS
-    # =====================================================
+    # ==========================================================
     st.header("💡 Insight Otomatis")
 
     insight = f"""
-    - Rata-rata skor siswa adalah **{rata_skor:.2f}** dari maksimal **{skor_max}**
-    - Soal paling sulit adalah **{soal_sulit}**
-    - Soal paling mudah adalah **{soal_mudah}**
-    - Model regresi memiliki R² sebesar **{model.rsquared:.3f}**
+    Rata-rata skor siswa adalah {rata_skor:.2f}.
+    Soal paling sulit adalah {soal_sulit}.
+    Soal paling mudah adalah {soal_mudah}.
     """
 
     st.info(insight)
 
-    # =====================================================
+    st.divider()
+
+    # ==========================================================
     # DOWNLOAD DATA
-    # =====================================================
-    st.header("⬇ Download Data Hasil Analisis")
+    # ==========================================================
+    st.header("⬇ Download Data")
 
     csv = df.to_csv(index=False).encode("utf-8")
 
     st.download_button(
-        label="Download Data",
+        label="Download Data Hasil Analisis",
         data=csv,
         file_name="hasil_analisis.csv",
         mime="text/csv"
     )
+
+else:
+    st.info("Silakan upload file Excel untuk memulai analisis.")
